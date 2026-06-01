@@ -1,0 +1,2 @@
+*.keras filter=lfs diff=lfs merge=lfs -text
+Hw13/*.keras filter=lfs diff=lfs merge=lfs -text
