@@ -4,7 +4,6 @@ import numpy as np
 from PIL import Image, ImageOps
 import os
 
-
 CLASS_NAMES = ["Футболка", "Штани", "Пуловер", "Сукня", "Пальто",
                "Сандалі", "Сорочка", "Кросівки", "Сумка", "Черевики"]
 
@@ -23,6 +22,12 @@ else:
     model_path_keras = 'model_vgg.keras'
     metrics_path = 'vgg_metrics.png'
 
+@st.cache_resource
+def load_cached_model(model_path):
+    if not os.path.exists(model_path):
+        return None
+    return tf.keras.models.load_model(model_path)
+
 st.subheader("Model Training Metrics")
 if os.path.exists(metrics_path):
     st.image(metrics_path, use_container_width=True)
@@ -38,29 +43,38 @@ if uploaded_file is not None:
     st.image(image, caption='Uploaded Image', width=300)
 
     if st.button("Classify Image"):
-        if not os.path.exists(model_path_keras):
-            st.error(f"Model file not found at: {model_path_keras}. Please check Google Drive.")
-        else:
-            with st.spinner("Loading model and predicting... This may take a few seconds."):
-                try:
-                    model = tf.keras.models.load_model(model_path_keras)
-
+        with st.spinner("Loading model and predicting... This may take a few seconds."):
+            try:
+                model = load_cached_model(model_path_keras)
+                
+                if model is None:
+                    st.error(f"Model file not found at: {model_path_keras}. Please check your files.")
+                else:
                     input_shape = model.input_shape[1:3]
 
-                    img_gray = image.convert('L')
-
-                    if invert_colors:
-                        img_gray = ImageOps.invert(img_gray)
-
-                    img_resized = img_gray.resize(input_shape)
-                    img_array = np.array(img_resized)
-
-                    if len(img_array.shape) == 2:
+                    if model_option == 'Convolutional Neural Network':
+                        img_processed = image.convert('L')
+                        
+                        if invert_colors:
+                            img_processed = ImageOps.invert(img_processed)
+                            
+                        img_resized = img_processed.resize(input_shape)
+                        img_array = np.array(img_resized)
+                        
                         img_array = np.expand_dims(img_array, axis=-1)
-                    elif img_array.shape[-1] != 1:
-                        img_array = img_array[:, :, :1]
+                        img_array = img_array.astype('float32') / 255.0
+                        
+                    else:
+                        img_processed = image.convert('RGB')
+                        
+                        if invert_colors:
+                            img_processed = ImageOps.invert(img_processed)
+                            
+                        img_resized = img_processed.resize(input_shape)
+                        img_array = np.array(img_resized)
+                        
+                        img_array = tf.keras.applications.vgg16.preprocess_input(img_array)
 
-                    img_array = img_array.astype('float32') / 255.0
                     img_array = np.expand_dims(img_array, axis=0)
 
                     predictions = model.predict(img_array)[0]
@@ -75,8 +89,5 @@ if uploaded_file is not None:
                         st.write(f"- **{class_name}**: {prob*100:.2f}%")
                         st.progress(float(prob))
 
-                    del model
-                    tf.keras.backend.clear_session()
-
-                except Exception as e:
-                    st.error(f"Error during classification: {str(e)}")
+            except Exception as e:
+                st.error(f"Error during classification: {str(e)}")
